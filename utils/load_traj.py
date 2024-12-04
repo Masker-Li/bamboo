@@ -27,6 +27,15 @@ from scipy.spatial import KDTree
 from utils.constant import atom_mapper
 
 
+elemental_reference_energy = {
+    8: -435.47248972,
+    6: -154.05661131,
+    1: -16.63427719,
+    3: -114.4753,
+    15: -114.4753,
+    9: -659.92938527,
+}
+
 class Domain:
     def __init__(self) -> None:
         self.xlo = None
@@ -62,11 +71,14 @@ class Frame:
         # Define type conversion in a separate method for clarity
         int_types = ["id", "type", "ix", "iy", "iz"]
         float_types = ["xu", "yu", "zu", "xs", "ys", "zs", "x", "y", "z", "vx", "vy", "vz", "fx", "fy", "fz", "q", "charge"]
-
+        ignore_types = ['element']
+          
         if x in int_types:
             return (x, np.int32)
         elif x in float_types:
             return (x, np.float32)
+        elif x in ignore_types:
+            return (x, str)
         else:
             raise ValueError(f"Unknown type {x}")
 
@@ -195,7 +207,7 @@ def fetch_pressure_volume(log_lammps: str):
         for line in lines:
             if line.startswith('  G vector'):
                 log_info['g_ewald'] = torch.tensor(float(line.split()[-1]))
-            if line.startswith('Step Temp Press'):
+            if 'Step' in line and 'Temp' in line and 'Press' in line:
                 start_flag = True
                 continue
             if not start_flag:
@@ -229,10 +241,18 @@ def prepare_frame_data(frame: Frame, type_array: np.array, molecular: torch.Tens
     data['pos'] = pos
     data['atom_types'] = torch.tensor(atom_type, dtype=torch.long)
 
+    # ========================== Modified start ==========================
+    energy_ref = data['atom_types'].clone().float()
+    energy_ref.apply_(lambda x: elemental_reference_energy[x])
+    energy_ref_mol = torch.sum(energy_ref, dim=0)
+    data['energy_ref'] = energy_ref_mol
+    # data['energy'] = energy_ref_mol*23.0609 + data['energy']
+    # ========================== Modified end ==========================
+    
     edge_index, edge_cell_shift = get_edge(pos, kd_tree, nn_cutoff, boxsize_tensor=boxsize_tensor)
     data['edge_index'], data['edge_cell_shift'] = edge_index, edge_cell_shift
     outer = molecular[data["edge_index"][0]] != molecular[data["edge_index"][1]]
-    
+
     data['molecular'] = torch.LongTensor(molecular)
 
     data['edge_outer_mask'] = outer.to(torch.float32)
@@ -279,6 +299,7 @@ def write_data(
     lammps_dump = LammpsDump(file_path=out_lammps_traj, filter_config=filter_config)
     lammps_dump.series_parse()
 
+    # print('Bingo:', lammps_dump.frames, type_array, log_info)
     if not lammps_dump.frames:
         return
 
@@ -290,6 +311,7 @@ def write_data(
         data.update(log_info[frame.step])
 
         output_data = {"inputs": data, "mixture_name": mixture_name}
+        # print('Bingo:', output_data)
         torch.save(output_data, os.path.join(output_folder, f'frame_{frame.step}.pt'))
 
 

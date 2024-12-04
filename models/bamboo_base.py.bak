@@ -192,10 +192,6 @@ class BambooBase(torch.nn.Module):
         # predict NN energy
         energy = self.energy_mlp(node_feat).squeeze(-1) 
         nn_energy = scatter(energy, inputs['mol_ids'], dim=0, dim_size=self.nmol) 
-        # ========================== Modified start ==========================
-        nn_energy = inputs['energy_ref']*23.0609 + nn_energy
-        # nn_energy = inputs['energy_ref'] + nn_energy
-        # ========================== Modified end ==========================
 
         return nn_energy, pred_charge, electronegativity_energy
 

@@ -1,0 +1,50 @@
+units             real
+atom_style        full
+atom_modify       map yes
+newton off
+read_data system-full.data
+#read_data in.data
+
+pair_style      bamboo 5.0 5.0 10.0 1
+pair_coeff      ais2_21_epoch_500_loss_728261.pt     H LI C O F P
+#pair_coeff     benchmark.pt   H LI C O F P
+
+kspace_style    pppm 1.0e-6
+kspace_modify   mesh 64 64 64
+
+neighbor	    3 bin
+neigh_modify    delay 0 every 1 check yes
+timestep        1
+
+thermo          10
+thermo_style    custom step temp press vol density pe ke etotal evdwl ecoul spcpu 
+
+variable pxy equal pxy
+variable pxz equal pxz
+variable pyz equal pyz
+fix pressure all ave/time 1 1 1 v_pxy v_pxz v_pyz file dump_pressure.out
+
+dump 1 all custom 1000 dump_npt.lammpstrj id type element xu yu zu x y z ix iy iz vx vy vz fx fy fz q
+dump_modify     1 sort id element H Li C O F P
+
+velocity all create 300.0 4928459
+velocity all zero linear
+
+minimize 0.0 0.0 1000 100000
+
+# Fix NPT
+fix 1 all npt temp 300.0 300.0 100 iso 0 0 1000
+
+run 100000
+write_data npt.data
+unfix 1
+undump 1
+
+dump 2 all custom 1000 dump_nvt.lammpstrj id type element xu yu zu x y z ix iy iz vx vy vz fx fy fz q
+dump_modify     2 sort id element H Li C O F P
+
+# Fix NVT
+fix 2 all nvt temp 300.0 300.0 10
+
+run 100000
+write_data nvt.data

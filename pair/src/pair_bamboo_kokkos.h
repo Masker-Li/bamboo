@@ -102,6 +102,7 @@ protected:
    using FloatView2D = Kokkos::View<float**, Kokkos::LayoutRight, DeviceType>;
    using DoubleView2D = Kokkos::View<double**, Kokkos::LayoutRight, DeviceType>;
    using DoubleView3D = Kokkos::View<double***, Kokkos::LayoutRight, DeviceType>;
+   using DoubleView1D = Kokkos::View<double*, Kokkos::LayoutRight, DeviceType>;
    using UnmanagedFloatView1D = Kokkos::View<float*, Kokkos::LayoutRight, DeviceType>;
    using UnmanagedFloatView2D = Kokkos::View<float**, Kokkos::LayoutRight, DeviceType>;
    using UnmanagedDoubleView1D = Kokkos::View<double*, Kokkos::LayoutRight, DeviceType>;
@@ -124,6 +125,8 @@ protected:
    LongView1D d_atom_types;
    LongView2D d_disp_edges, d_coul_edges, d_net_edges;
    DoubleView2D d_atom_pos;
+   DoubleView1D d_mol_energy_ref;
+   DoubleView1D d_element_energy_mapper;
 
    IntView1D d_numneigh_net, d_numneigh_coul, d_numneigh_disp;
    IntView1D d_cumsum_numneigh_net, d_cumsum_numneigh_coul, d_cumsum_numneigh_disp;

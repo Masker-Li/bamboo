@@ -23,7 +23,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include <torch/torch.h>
 #include <torch/script.h>
 
-
 using namespace LAMMPS_NS;
 
 #ifdef LMP_KOKKOS_GPU
@@ -159,6 +158,7 @@ void PairBAMBOOKokkos<DeviceType>::compute(int eflag_in, int vflag_in)
     auto f = this->f;
     auto d_eatom = this->d_eatom;
     auto d_type_mapper = this->d_type_mapper;
+    auto d_element_energy_mapper = this->d_element_energy_mapper;
     auto tag = this->tag;
     auto q = this->q;
     auto edge_mode = this->edge_mode;
@@ -270,6 +270,7 @@ void PairBAMBOOKokkos<DeviceType>::compute(int eflag_in, int vflag_in)
     }
     if(d_atom_types.extent(0) < inum){
         reallocateView(d_atom_types, "BAMBOO: atom_types", inum);
+        reallocateView(d_mol_energy_ref, "BAMBOO: mol_energy_ref", inum);
         reallocateView(d_atom_pos, "BAMBOO: atom_pos", inum, 3);
     }
     
@@ -279,6 +280,7 @@ void PairBAMBOOKokkos<DeviceType>::compute(int eflag_in, int vflag_in)
     auto d_net_edges  = this->d_net_edges;
     auto d_disp_edges = this->d_disp_edges;
     auto d_atom_types    = this->d_atom_types;
+    auto d_mol_energy_ref    = this->d_mol_energy_ref;
     auto d_atom_pos     = this->d_atom_pos;
     auto d_edge_shift_coul = this->d_edge_shift_coul;
     auto d_edge_shift_disp = this->d_edge_shift_disp;
@@ -288,6 +290,7 @@ void PairBAMBOOKokkos<DeviceType>::compute(int eflag_in, int vflag_in)
         const int itag = tag(i) - 1;
         // 1 based to 0 based index.
         d_atom_types(itag) = d_type_mapper(d_type(i) - 1);
+        d_mol_energy_ref(itag) = d_element_energy_mapper(d_type(i) - 1);
         d_atom_pos(itag,0) = x(i,0);
         d_atom_pos(itag,1) = x(i,1);
         d_atom_pos(itag,2) = x(i,2);
@@ -372,6 +375,8 @@ void PairBAMBOOKokkos<DeviceType>::compute(int eflag_in, int vflag_in)
     torch::Tensor disp_edge_cell_shift = torch::from_blob(d_edge_shift_disp.data(), {n_disp_edges, 3}, {3 ,1}, torch::TensorOptions().dtype(torch::kFloat64).device(device)); 
 
     torch::Tensor ij2type_tensor = torch::from_blob(d_atom_types.data(), {inum}, torch::TensorOptions().dtype(torch::kInt64).device(device));
+    torch::Tensor eref_tensor = torch::from_blob(d_mol_energy_ref.data(), {inum}, torch::TensorOptions().dtype(torch::kInt64).device(device));
+    torch::Tensor eref_mol_tensor = torch::tensor({eref_tensor.sum().item<double>()}, torch::TensorOptions().dtype(torch::kInt64).device(device));
     torch::Tensor pos_tensor = torch::from_blob(d_atom_pos.data(), {inum,3}, {3,1}, torch::TensorOptions().device(device));
     torch::Tensor cell_tensor = torch::from_blob(d_domain_box.data(), {3,3}, {3, 1}, torch::TensorOptions().dtype(torch::kFloat64).device(device));
     torch::Tensor ewald_tensor = torch::tensor({g_ewald}, torch::TensorOptions().dtype(torch::kFloat64).device(device));
@@ -391,7 +396,9 @@ void PairBAMBOOKokkos<DeviceType>::compute(int eflag_in, int vflag_in)
             coul_edge_cell_shift,
             net_edge_cell_shift,
             disp_edge_cell_shift,
-            ij2type_tensor, pos_tensor,
+            ij2type_tensor, 
+            eref_tensor, eref_mol_tensor,
+            pos_tensor,
             cell_tensor,
             ewald_tensor,
             edge_shift_tensor,
@@ -403,7 +410,6 @@ void PairBAMBOOKokkos<DeviceType>::compute(int eflag_in, int vflag_in)
         std::cout << "Save tensor to tensor.pt" << "\n";
     }
 
-
     c10::Dict<std::string, torch::Tensor> input;
     input.insert("pos", pos_tensor);
     input.insert("edge_index", net_edges_index);
@@ -414,6 +420,7 @@ void PairBAMBOOKokkos<DeviceType>::compute(int eflag_in, int vflag_in)
     input.insert("disp_edge_cell_shift", disp_edge_cell_shift);
     input.insert("cell", cell_tensor);
     input.insert("atom_types", ij2type_tensor);
+    input.insert("energy_ref", eref_mol_tensor);
     input.insert("g_ewald", ewald_tensor);
     std::vector<torch::IValue> input_vector(1, input);
     click_timer("Pre-inference");
@@ -490,6 +497,13 @@ void PairBAMBOOKokkos<DeviceType>::coeff(int narg, char **arg)
         h_type_mapper(i) = type_mapper[i];
     }
     Kokkos::deep_copy(d_type_mapper, h_type_mapper);
+
+    d_element_energy_mapper = DoubleView1D("BAMBOO: element_energy_mapper", element_energy_mapper.size());
+    auto h_element_energy_mapper = Kokkos::create_mirror_view(d_element_energy_mapper);
+    for(int i = 0; i < element_energy_mapper.size(); i++){
+        h_element_energy_mapper(i) = element_energy_mapper[i];
+    }
+    Kokkos::deep_copy(d_element_energy_mapper, h_element_energy_mapper);
 }
 
 

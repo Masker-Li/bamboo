@@ -1,0 +1,22 @@
+{
+    "job_name": "ensemble_ais2_3",
+    "data_training_config": "modified_train_complete_20240429_cp2k_v2/data_config.json",
+    "data_validation_config": "modified_val_complete_20240429_cp2k_v2/data_config.json",
+    "batch_size": 512,
+    "models": ["simulation-ais/ais2_13_epoch_255_loss_729557.pt", "simulation-ais/ais2_19_epoch_1000_loss_718131.pt", "simulation-ais/ais2_21_epoch_200_loss_736765.pt"], 
+    "frame_directories": ["MDframes/"],
+    "ensemble_model": "simulation-ais/ais2_13_epoch_255_loss_729557.pt",
+    "validation_split_ratio": 0.1,
+    "lr": 1e-6,
+    "epochs": 200,
+    "scheduler_gamma": 0.99,
+    "validation_interval": 10,
+    "energy_ratio": 1.0,
+    "force_ratio": 3.0,
+    "virial_ratio": 100,
+    "bulk_energy_ratio": 1.0,
+    "bulk_force_ratio": 3.0,
+    "bulk_virial_ratio": 100,
+    "max_frames_per_mixture": 960,
+    "frame_validation_interval": 3
+}

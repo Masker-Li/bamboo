@@ -237,6 +237,13 @@ void PairBAMBOO::coeff(int narg, char **arg) {
         type_mapper.push_back(symbol_to_index[elements[i]]);
     }
 
+    std::vector<double> element_energy_mapper = {  -16.63427719        ,   0.     ,   -114.4753  ,   
+                                                    0.      ,   0.      , -154.05661131        ,
+                                                    0.     , -435.47248972  ,   -659.92938527      ,
+                                                    0.      ,   0.        ,   0.     ,
+                                                    0.  ,   0.      ,   -114.4753      ,
+                                                    0.      ,   0.        ,   0.     };
+
     std::cout << "Loading model from " << arg[0] << "\n";
 
     try {

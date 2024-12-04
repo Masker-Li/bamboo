@@ -1,0 +1,97 @@
+units             real
+atom_style        full
+atom_modify       map yes
+newton off
+read_data in.data
+
+pair_style      bamboo 5.0 5.0 10.0 1
+#pair_coeff      opls4_epoch_1000_loss_5422.pt   H LI C O F P
+pair_coeff      benchmark.pt   H LI C O F P
+
+kspace_style    pppm 1.0e-6
+kspace_modify   mesh 64 64 64
+
+velocity all create 300.0 1234567 loop geom
+
+timestep 0.1
+neighbor 1.0 bin
+neigh_modify    every 10 delay 0 check yes
+
+variable        simTemp equal 300
+variable        EQSTEPS equal 100000   # 0.1 ns
+variable        PRSTEPS equal 100000  # 0.1 ns
+variable        EQSTEPS_AVE equal v_EQSTEPS/1000
+variable        PRSTEPS_AVE equal v_PRSTEPS/1000
+variable        tdamp equal dt*100  #100
+variable        pdamp equal dt*1000 #1000
+variable        step equal step
+variable        time equal dt*step/1000
+variable        temp equal temp
+variable        press equal press
+variable        vol equal vol
+variable        den equal density
+variable        dt equal dt
+variable        pe equal pe
+variable        pxx equal pxx
+variable        pyy equal pyy
+variable        pzz equal pzz
+variable        pxy equal pxy
+variable        pxz equal pxz
+variable        pyz equal pyz
+variable        vseed equal 42
+variable        simPress equal 1.01325
+
+compute         press all pressure NULL virial
+
+thermo          1
+thermo_style    custom step temp press vol density lx ly lz etotal epair emol pe ke                                                                         
+dump            eq all custom 1 mol_eq.lammpstrj id type element x y z ix iy iz vx vy vz fx fy fz
+dump_modify     eq sort id element C F Li O P H
+
+print "--- Generate velocity ---"
+velocity all create ${simTemp} ${vseed} dist gaussian
+run 0
+velocity all scale ${simTemp}
+
+fix             extra all print 1000 "${step} ${dt} ${temp} ${press} ${vol} ${den} ${pe}" screen no file Log_density_eq.data title "step timestep temp press volume density pot"
+
+#print "--- Run NVT ---"
+#fix             1 all nvt temp ${simTemp} ${simTemp} ${tdamp}
+#run             ${EQSTEPS}
+#unfix           1
+
+# min_style cg
+# minimize 1.0e-6 1.0e-8 1000 10000
+
+print "--- Run NPT ---"
+fix             2 all npt temp ${simTemp} ${simTemp} ${tdamp} iso ${simPress} ${simPress} ${pdamp}
+run             ${EQSTEPS}
+unfix           2
+
+undump eq
+write_data      system_after_eq.data
+
+dump            prod all custom 1 mol_prod.lammpstrj id type element x y z ix iy iz vx vy vz fx fy fz
+dump_modify     prod sort id element C F Li O P H
+
+print "--- Run NPT ---"
+fix             vol all ave/time 1000 ${EQSTEPS_AVE} ${EQSTEPS} v_vol ave running
+fix             den all ave/time 1000 ${EQSTEPS_AVE} ${EQSTEPS} v_den ave running
+fix             pe all ave/time 100 ${EQSTEPS_AVE} ${EQSTEPS} v_pe ave running
+fix             3 all npt temp ${simTemp} ${simTemp} ${tdamp} iso ${simPress} ${simPress} ${pdamp}
+fix             extra all print 1000 "${step} ${dt} ${temp} ${press} ${vol} ${den} ${pe}" screen no file Log_density_prod.data title "step timestep temp press volume density pot"
+
+run             ${PRSTEPS}
+
+variable        avg_volume equal f_vol
+variable        avg_density equal f_den
+variable        avg_pe equal f_pe
+print "Average box volume is ${avg_volume}"
+variable        avg_length equal ${avg_volume}^(1.0/3.0)
+print "Average box length is ${avg_length}"
+print "Average density is ${avg_density}"
+print "Average pot is ${avg_pe}"
+
+
+write_data      system_after_prod.data
+

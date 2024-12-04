@@ -51,6 +51,7 @@ public:
 
 protected:
     std::vector<int> type_mapper;
+    std::vector<double> element_energy_mapper;
     int debug_mode = 0;
     int bamboo_timer = 0;
     int timer_counter = 0;
